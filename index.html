@@ -1,0 +1,199 @@
+<html>
+
+    <head>
+        <meta charset="UTF-8">
+        <title> Kart lottery min app </title>
+
+        <style>
+            body {
+                background-color: #fff2e6;
+            }
+            .section {
+                background-color: #e6e6e6;
+                border-radius: 10px;
+                width: 60%;
+                margin: auto;
+                padding: 20px;
+            }
+            .series {
+                width: 80%;
+                margin: auto;
+            }
+            input {
+                outline: none;
+                border: none;
+            }
+            button {
+                position: relative;
+                display: inline-block;
+                font-weight: bold;
+                padding: 0.25em 0.5em;
+                text-decoration: none;
+            }
+            #drivers {
+                font-family: Arial, Helvetica, sans-serif;
+                border-collapse: collapse;
+                width: 100%;
+                background-color: #e6e6e6;
+            }
+
+            #drivers td, #drivers th {
+                border: 1px solid #ddd;
+                padding: 8px;
+            }
+
+            #drivers tr:nth-child(even){background-color: #f2f2f2;}
+
+            #drivers tr:hover {background-color: #ddd;}
+
+            #drivers th {
+                padding-top: 12px;
+                padding-bottom: 12px;
+                text-align: left;
+                background-color: #4CAF50;
+                color: white;
+            }
+        </style>
+    </head>
+
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.3/angular.js"> </script>
+	<script>
+		var app = angular.module("routing", []);
+		app.controller("lotteryCtrl", function( $scope, $sce ) {
+			var vm = this;
+            vm.karts = [];
+            vm.series = [];
+            vm.newSeriesName = '';
+            vm.newKartNumber = 1;
+            vm.event = {};
+
+            vm.addSeries = function() {
+                vm.series.push({name: vm.newSeriesName, drivers: [], heats: [{id: 0, deal: false}]});
+                vm.newSeriesName = '';
+            }
+
+            vm.addKart = function() {
+                if ( vm.newKartNumber == 0 ) {
+                    alert('Kart can not be 0');
+                    return;
+                }
+                var found = vm.karts.find((k) => k == vm.newKartNumber);
+                if ( found ) {
+                    alert('Kart already added');
+                    return;
+                }
+                vm.karts.push(vm.newKartNumber);
+            }
+
+            vm.dealHeat = function (serie, heat, mustShow) {
+                if (serie.drivers.length > vm.karts.length ) {
+                    alert('not enough karts');
+                    return;
+                }
+
+                if (heat.deal) {
+                    return;
+                }
+                var lk = [].concat(vm.karts);
+                var breakL = false;
+                for ( var i = 0; i < serie.drivers.length && !breakL; i++ ) {
+                    var isNew = false;
+                    var kart = 0;
+                    while (!isNew && !breakL) {
+                        kart = Math.floor(Math.random() * lk.length); 
+                        var found = serie.drivers[i].karts.find(e => e.number == lk[kart]);
+                        if (!found) {
+                            isNew = true;
+                        } else if (lk.length <= 1) {
+                            breakL = true;
+                        }
+                    }
+                    serie.drivers[i].karts[heat.id] = { number: lk[kart], show: mustShow };
+                    lk.splice(kart, 1);
+                }
+
+                // Roll back heat deal
+                if (breakL) {
+                    for (var i = 0; i < serie.drivers.length; i++) {
+                        serie.drivers[i].karts[heat.id] = 0;
+                    }
+                    return vm.dealAllHeat(serie, heat);
+                }
+
+                heat.deal = true;
+            }
+
+            vm.dealAllHeat = function (serie, heat) {
+                return vm.dealHeat(serie, heat, true);
+            }
+
+            vm.dealNext = function (serie, heat) {
+                vm.dealHeat(serie, heat, false);
+                var found = false;
+                for ( var i = 0; i < serie.drivers.length && !found; i++ ) {
+                    if (!serie.drivers[i].karts[heat.id].show) {
+                        serie.drivers[i].karts[heat.id].show = true;
+                        found = true;
+                    }
+                }
+            }
+		});
+	</script>
+
+	<body ng-app="routing" ng-controller="lotteryCtrl as ltc">
+
+        <div style="width: 100%;"> 
+            <div style="text-align: center">
+                <h1> {{ltc.event.organization}} </h1>
+                <h1> {{ltc.event.name}} </h1>
+            </div>
+        </div>
+
+        <div class="section">
+        <table>
+        <tr><td>Organization name:</td><td><input type="text" ng-model="ltc.event.organization"> </input></td></tr>
+        <tr><td>Event name:</td><td><input type="text" ng-model="ltc.event.name"> </input></td></tr>
+        <tr><td>Event date:</td><td><input type="text" ng-model="ltc.event.date"> </input></td></tr>
+        </table>
+        </div>
+        <br>
+
+        <div class="section">
+        <table>
+        <tr><td>Add series</td><td><input type="text" ng-model="ltc.newSeriesName"> </input></td><td><button ng-click="ltc.addSeries()"> + </button></td></tr>
+        <tr><td>Add kart</td><td><input type="number" ng-model="ltc.newKartNumber"> </input></td><td><button ng-click="ltc.addKart()"> + </button></td></tr>
+        <tr><td>Karts:</td><td> {{ltc.karts}} </td></tr>
+        </table>
+        </div>
+
+        <div ng-repeat="serie in ltc.series track by $index" style="vertical-align:middle;" class="series">
+            <br> <hr>
+
+            <h2>{{serie.name}}: </h2>
+
+
+            <label>Add driver</label> <input type="text" ng-model="serie.newDriver"> </input> <button ng-click="serie.drivers.push({name: serie.newDriver, karts: []})"> + </button> 
+            <label style="margin-left: 10%">Add heat:</label> <button ng-click="serie.heats.push({id: serie.heats.length, deal: false})"> + </button>
+
+		    <table id="drivers" style="border: 1px solid black; width: 100%;">
+		    	<tr> 
+		    		<th> Driver Name </th>
+                    <th ng-repeat="h in serie.heats"> 
+                         Heat #{{h.id + 1}} 
+                         <button ng-click="ltc.dealAllHeat(serie, h)"> All </button>
+                         <button ng-click="ltc.dealNext(serie, h)"> Next </button>
+                    </th>
+		    	</tr>
+
+		    	<tr ng-repeat="driver in serie.drivers track by $index">
+		    		<td> {{ driver.name }} </td>
+                    <td ng-repeat="h in serie.heats track by $index"> <div ng-show="driver.karts[$index].show"> {{ driver.karts[$index].number }} </div> </td>
+		    	</tr>
+		    </table>
+
+            <br>
+        </div>
+
+	</body>
+
+</html>
