@@ -30,6 +30,13 @@
                 padding: 0.25em 0.5em;
                 text-decoration: none;
             }
+            .abb {
+                font-size: 10px;
+            }
+            .aB {
+                width: 20px;
+                font-size: 5px;
+            }
             #drivers {
                 font-family: Arial, Helvetica, sans-serif;
                 border-collapse: collapse;
@@ -66,10 +73,67 @@
             vm.newSeriesName = '';
             vm.newKartNumber = 1;
             vm.event = {};
+            vm.olderEvents = [];
+            vm.oldEventSelected = '';
+
+            var olderEvents = localStorage.getItem('events');
+            if ( olderEvents ) {
+                vm.olderEvents = JSON.parse(olderEvents);
+            }
+
+            vm.save = function () {
+                if ( vm.event.name == '' || vm.event.date == '' ) {
+                    alert('Can not save unnamed event');
+                    return;
+                }
+                var eventKey = vm.event.date + "_" + vm.event.name;
+                localStorage.setItem(eventKey, JSON.stringify({series: vm.series, karts: vm.karts, event: vm.event}));
+
+                var found = vm.olderEvents.find((e) => e == eventKey);
+                if (!found) {
+                    vm.olderEvents.push(eventKey);
+                    localStorage.setItem('events', JSON.stringify(vm.olderEvents));
+                }
+            }
+
+            vm.load = function () {
+                var data = localStorage.getItem(vm.oldEventSelected);
+                data = JSON.parse(data);
+                vm.series = data.series;
+                vm.karts = data.karts;
+                vm.event = data.event;
+            }
+
+            vm.removeEvent = function () {
+                localStorage.removeItem(vm.oldEventSelected);
+                vm.olderEvents = vm.olderEvents.filter((ev) => ev != vm.oldEventSelected);
+                localStorage.setItem('events', JSON.stringify(vm.olderEvents));
+            }
+
+            vm.newEvent = function () {
+                vm.karts = [];
+                vm.series = [];
+                vm.event = {};
+            }
 
             vm.addSeries = function() {
+                var found = vm.series.find((k) => k.name == vm.newSeriesName);
+                if ( found ) {
+                    alert('Series already exists');
+                    return;
+                }
                 vm.series.push({name: vm.newSeriesName, drivers: [], heats: [{id: 0, deal: false}]});
                 vm.newSeriesName = '';
+            }
+
+            vm.removeSeries = function( serie ) {
+                vm.series = vm.series.filter((s) => s.name != serie.name);
+            }
+            vm.removeKart = function() {
+                vm.karts = vm.karts.filter((k) => k != vm.newKartNumber);
+            }
+            vm.removeDriver = function(series, driver) {
+                series.drivers = series.drivers.filter((d) => d.name != driver.name);
             }
 
             vm.addKart = function() {
@@ -115,7 +179,7 @@
                 // Roll back heat deal
                 if (breakL) {
                     for (var i = 0; i < serie.drivers.length; i++) {
-                        serie.drivers[i].karts[heat.id] = 0;
+                        serie.drivers[i].karts[heat.id] = { number: 0, show: false };
                     }
                     return vm.dealAllHeat(serie, heat);
                 }
@@ -137,6 +201,18 @@
                     }
                 }
             }
+
+            vm.removeHeat = function( serie, heat ) {
+                vm.resetHeat(serie, heat);
+                serie.heats = serie.heats.filter((h) => h.id != heat.id);
+            }
+
+            vm.resetHeat = function( serie, heat ) {
+                for (var i = 0; i < serie.drivers.length; i++) {
+                    serie.drivers[i].karts[heat.id] = { number: 0, show: false };
+                }
+                heat.deal = false;
+            }
 		});
 	</script>
 
@@ -154,6 +230,16 @@
         <tr><td>Organization name:</td><td><input type="text" ng-model="ltc.event.organization"> </input></td></tr>
         <tr><td>Event name:</td><td><input type="text" ng-model="ltc.event.name"> </input></td></tr>
         <tr><td>Event date:</td><td><input type="text" ng-model="ltc.event.date"> </input></td></tr>
+        <tr>
+            <td><button ng-click="ltc.save()"> Save </button></td>
+            <td>
+                <select ng-model="ltc.oldEventSelected">
+                    <option ng-repeat="ev in ltc.olderEvents" value="{{ev}}">{{ev}}</option>
+                </select>
+            </td>
+            <td><button ng-click="ltc.load()"> Load </button></td>
+            <td><button ng-click="ltc.removeEvent()"> Remove </button></td>
+            <td><button ng-click="ltc.newEvent()"> New </button></td></tr>
         </table>
         </div>
         <br>
@@ -161,7 +247,10 @@
         <div class="section">
         <table>
         <tr><td>Add series</td><td><input type="text" ng-model="ltc.newSeriesName"> </input></td><td><button ng-click="ltc.addSeries()"> + </button></td></tr>
-        <tr><td>Add kart</td><td><input type="number" ng-model="ltc.newKartNumber"> </input></td><td><button ng-click="ltc.addKart()"> + </button></td></tr>
+        <tr>
+            <td>Add kart</td><td><input type="number" ng-model="ltc.newKartNumber"> </input></td>
+            <td><button ng-click="ltc.addKart()"> + </button></td>
+            <td><button ng-click="ltc.removeKart()"> - </button></td></tr>
         <tr><td>Karts:</td><td> {{ltc.karts}} </td></tr>
         </table>
         </div>
@@ -172,22 +261,27 @@
             <h2>{{serie.name}}: </h2>
 
 
-            <label>Add driver</label> <input type="text" ng-model="serie.newDriver"> </input> <button ng-click="serie.drivers.push({name: serie.newDriver, karts: []})"> + </button> 
-            <label style="margin-left: 10%">Add heat:</label> <button ng-click="serie.heats.push({id: serie.heats.length, deal: false})"> + </button>
+            <label>Add driver:</label> <input type="text" ng-model="serie.newDriver"> </input> <button ng-click="serie.drivers.push({name: serie.newDriver, karts: []}); serie.newDriver = '';"> + </button> 
+            <button style="margin-left: 10%" ng-click="serie.heats.push({id: serie.heats[serie.heats.length - 1].id + 1, deal: false})"> Add heat </button>
+            <button style="margin-left: 10%" ng-click="ltc.removeSeries(serie)"> Remove series </button>
 
 		    <table id="drivers" style="border: 1px solid black; width: 100%;">
 		    	<tr> 
+		    		<th style="width: 20px"> - </th>
 		    		<th> Driver Name </th>
                     <th ng-repeat="h in serie.heats"> 
                          Heat #{{h.id + 1}} 
-                         <button ng-click="ltc.dealAllHeat(serie, h)"> All </button>
-                         <button ng-click="ltc.dealNext(serie, h)"> Next </button>
+                         <button class="abb" ng-click="ltc.dealAllHeat(serie, h)"> All </button>
+                         <button class="abb" ng-click="ltc.dealNext(serie, h)"> Next </button>
+                         <button class="abb" ng-click="ltc.resetHeat(serie, h)"> Reset </button>
+                         <button class="abb" ng-click="ltc.removeHeat(serie, h)"> Remove </button>
                     </th>
 		    	</tr>
 
 		    	<tr ng-repeat="driver in serie.drivers track by $index">
+		    		<td> <button class="aB" ng-click="ltc.removeDriver( serie, driver )"> - </button> </td>
 		    		<td> {{ driver.name }} </td>
-                    <td ng-repeat="h in serie.heats track by $index"> <div ng-show="driver.karts[$index].show"> {{ driver.karts[$index].number }} </div> </td>
+                    <td ng-repeat="h in serie.heats track by $index"> <div ng-show="driver.karts[h.id].show"> {{ driver.karts[h.id].number }} </div> </td>
 		    	</tr>
 		    </table>
 
